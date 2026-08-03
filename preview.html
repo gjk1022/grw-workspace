@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>硕博成长工作台 · 项目总览</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e3a8a 100%);
+    min-height: 100vh;
+    color: #e2e8f0;
+    padding: 40px 20px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; }
+  h1 {
+    font-size: 36px;
+    background: linear-gradient(90deg, #fbbf24, #f59e0b);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+  .subtitle { color: #94a3b8; font-size: 14px; margin-bottom: 30px; }
+  .badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    margin-right: 8px;
+    background: rgba(99, 102, 241, 0.2);
+    color: #a5b4fc;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+  }
+  .card {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .card h2 {
+    color: #fbbf24;
+    font-size: 18px;
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card p { color: #cbd5e1; line-height: 1.7; font-size: 14px; }
+  .link-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .link-card {
+    background: rgba(99, 102, 241, 0.15);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: 12px;
+    padding: 16px;
+    text-decoration: none;
+    color: #e0e7ff;
+    transition: all 0.2s;
+  }
+  .link-card:hover {
+    background: rgba(99, 102, 241, 0.3);
+    transform: translateY(-2px);
+  }
+  .link-card .icon { font-size: 24px; margin-bottom: 6px; }
+  .link-card .title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .link-card .desc { font-size: 12px; color: #94a3b8; }
+  pre {
+    background: rgba(0,0,0,0.3);
+    padding: 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    color: #a5b4fc;
+    font-size: 12px;
+    line-height: 1.7;
+    margin-top: 12px;
+  }
+  .feature-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; margin-top: 12px; }
+  .feature {
+    background: rgba(255,255,255,0.03);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #cbd5e1;
+    border-left: 3px solid #f59e0b;
+  }
+  .status-running {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(16, 185, 129, 0.2);
+    color: #6ee7b7;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #10b981;
+    box-shadow: 0 0 8px #10b981;
+    animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🎓 硕博成长工作台</h1>
+  <p class="subtitle">Graduate Research Workspace · 长期使用的个人科研成长操作系统</p>
+
+  <div style="margin-bottom: 24px;">
+    <span class="badge">React 18 + TypeScript</span>
+    <span class="badge">FastAPI</span>
+    <span class="badge">SQLite</span>
+    <span class="badge">ECharts</span>
+    <span class="badge">TailwindCSS</span>
+    <span class="badge">17 个业务模块</span>
+  </div>
+
+  <div class="card">
+    <h2>🚀 服务运行状态</h2>
+    <p>
+      <span class="status-running"><span class="status-dot"></span> 前端服务 (Vite) http://localhost:5173/</span>
+      &nbsp;&nbsp;
+      <span class="status-running"><span class="status-dot"></span> 后端服务 (FastAPI) http://localhost:8000/</span>
+    </p>
+    <p style="margin-top: 12px;">✅ 数据库已初始化并注入示例数据 · ✅ API 全链路测试通过 · ✅ 前后端代理配置完成</p>
+  </div>
+
+  <div class="card">
+    <h2>🔗 立即体验</h2>
+    <div class="link-grid">
+      <a href="http://localhost:5173/" target="_blank" class="link-card">
+        <div class="icon">🏠</div>
+        <div class="title">主应用 (推荐)</div>
+        <div class="desc">完整工作台 · http://localhost:5173/</div>
+      </a>
+      <a href="http://localhost:5173/#/dashboard" target="_blank" class="link-card">
+        <div class="icon">📊</div>
+        <div class="title">仪表盘</div>
+        <div class="desc">数据卡片 + 雷达图 + 趋势</div>
+      </a>
+      <a href="http://localhost:5173/#/advisor" target="_blank" class="link-card">
+        <div class="icon">💬</div>
+        <div class="title">导师应答助手</div>
+        <div class="desc">AI 邮件回复生成</div>
+      </a>
+      <a href="http://localhost:5173/#/journal" target="_blank" class="link-card">
+        <div class="icon">🎓</div>
+        <div class="title">投稿择刊助手</div>
+        <div class="desc">AI 期刊推荐</div>
+      </a>
+      <a href="http://localhost:5173/#/literatures" target="_blank" class="link-card">
+        <div class="icon">📚</div>
+        <div class="title">文献管理</div>
+        <div class="desc">Zotero 风格</div>
+      </a>
+      <a href="http://localhost:8000/docs" target="_blank" class="link-card">
+        <div class="icon">🔧</div>
+        <div class="title">API 文档</div>
+        <div class="desc">FastAPI Swagger</div>
+      </a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>📦 全部 17 个业务模块</h2>
+    <div class="feature-list">
+      <div class="feature">🏠 仪表盘 Dashboard</div>
+      <div class="feature">🎯 计划与复盘</div>
+      <div class="feature">📄 论文进度管理</div>
+      <div class="feature">📈 成长中心</div>
+      <div class="feature">📚 文献库</div>
+      <div class="feature">📝 文献阅读笔记</div>
+      <div class="feature">🗒️ 组会纪要</div>
+      <div class="feature">🧪 项目管理</div>
+      <div class="feature">🔬 实验/模拟索引</div>
+      <div class="feature">💬 导师消息应答助手</div>
+      <div class="feature">🎓 投稿择刊助手</div>
+      <div class="feature">💪 健康打卡</div>
+      <div class="feature">🔤 英语学习</div>
+      <div class="feature">✏️ 日记随笔</div>
+      <div class="feature">💰 日常记账</div>
+      <div class="feature">✨ 灵感素材库</div>
+      <div class="feature">📁 文件中心</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🛠️ 技术架构</h2>
+    <p><b>前端</b>：React 18 + TypeScript + Vite + TailwindCSS + ECharts + React Router 6 + Axios</p>
+    <p style="margin-top: 6px;"><b>后端</b>：Python 3.13 + FastAPI 0.115 + Uvicorn + Pydantic v2</p>
+    <p style="margin-top: 6px;"><b>数据库</b>：SQLite（17 张表，启动自动建表，零依赖）</p>
+    <p style="margin-top: 6px;"><b>AI 接口</b>：本地示例回复，可一键替换为 OpenAI / DeepSeek / 通义千问 等大模型</p>
+  </div>
+
+  <div class="card">
+    <h2>📂 项目结构</h2>
+<pre>grw-workspace/
+├── backend/                 # FastAPI 后端
+│   ├── app.py              # 主程序（700+ 行，含全部 API + DB 初始化）
+│   ├── requirements.txt    # Python 依赖
+│   ├── grw.db              # SQLite（启动自动生成）
+│   └── uploads/            # 用户上传目录
+├── frontend/                # React 前端
+│   ├── src/pages/          # 17 个页面
+│   ├── src/components/     # CrudForm / CrudPage / icons
+│   ├── src/layout/         # 左侧深色导航 + 主区域
+│   └── package.json
+├── README.md                # 完整部署文档
+├── init.sql                 # 数据库初始化脚本
+└── start.bat                # Windows 一键启动</pre>
+  </div>
+
+  <div class="card">
+    <h2>▶️ 启动方式</h2>
+    <p><b>方式 1：一键启动 (Windows)</b></p>
+    <pre>cd grw-workspace
+start.bat</pre>
+    <p style="margin-top: 12px;"><b>方式 2：手动启动</b></p>
+    <pre># 后端
+cd backend
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe app.py
+
+# 前端（新窗口）
+cd frontend
+npm install
+npm run dev</pre>
+    <p style="margin-top: 12px;">访问 <a href="http://localhost:5173/" target="_blank" style="color:#fbbf24">http://localhost:5173/</a> 即可使用</p>
+  </div>
+
+  <div style="text-align: center; color: #64748b; font-size: 12px; margin-top: 30px;">
+    © 2026 GRW · v1.0.0 · MVP 已交付 · 可作为长期使用的个人科研 OS
+  </div>
+</div>
+</body>
+</html>

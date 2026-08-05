@@ -6,24 +6,30 @@ export default function Growth() {
   const [data, setData] = useState<any>({})
 
   useEffect(() => {
-    api.get('/dashboard').then(r => {
+    Promise.all([api.get('/dashboard'), api.get('/dashboard/radar')]).then(([d, r]) => {
       setData({
-        radar: r.data.radar,
-        points: r.data.points_week,
-        papers: r.data.papers_count,
-        lit: r.data.literatures_count
+        radar: r.data,
+        points: d.data.points_week,
+        papers: d.data.papers_count ?? d.data.papers_total,
+        lit: d.data.literatures_count
       })
     })
   }, [])
 
   const radarOption = {
-    title: { text: '成长能力雷达', left: 'left', textStyle: { fontSize: 14 } },
-    radar: { indicator: Object.keys(data.radar || {}).map(k => ({ name: k, max: 100 })) },
+    title: { text: '成长能力雷达', subtext: '每周一 0 点自动刷新 · 凹角即需补短板', left: 'left', top: 8, textStyle: { fontSize: 14 }, subtextStyle: { fontSize: 11, color: '#9ca3af' } },
+    tooltip: { formatter: (p: any) => { const v = p.value; const label = p.name; return `${label}: ${v}%<br/>${v>=80?'优势领域继续保持':v>=50?'稳定发展中':'需要重点提升'}` }},
+    radar: {
+      indicator: (data.radar?.labels || []).map((k: string) => ({ name: k, max: 100 })),
+      radius: 95,
+      splitArea: { areaStyle: { color: ['rgba(99,102,241,0.03)', 'rgba(99,102,241,0.06)'] } }
+    },
     series: [{
       type: 'radar',
-      data: [{ value: Object.values(data.radar || {}), name: '能力',
+      data: [{ value: data.radar?.values || [], name: '能力',
         areaStyle: { color: 'rgba(99,102,241,0.3)' },
-        lineStyle: { color: '#6366f1' } }]
+        lineStyle: { color: '#6366f1', width: 2 },
+        itemStyle: { color: '#6366f1' } }]
     }]
   }
 

@@ -19,6 +19,9 @@ export default function Dashboard() {
   const [radar, setRadar] = useState<any>(null)
   const [me, setMe] = useState<any>({})
   const [showReport, setShowReport] = useState(false)
+  const [greeting, setGreeting] = useState('')
+  const [showGreeting, setShowGreeting] = useState(false)
+  const [deadlines, setDeadlines] = useState<any>({ papers: [], projects: [] })
   const [report, setReport] = useState<any>(null)
   const [reportSaving, setReportSaving] = useState(false)
   const [reportSaved, setReportSaved] = useState(false)
@@ -33,7 +36,7 @@ export default function Dashboard() {
 
   const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
 
-  const load = () => api.get('/dashboard').then(r => setData(r.data))
+  const load = () => api.get('/dashboard').then(r => setData(r.data)).catch(e => { console.error('Dashboard load error:', e); alert('加载失败: ' + (e.message || '网络错误')) })
    const loadTodayTasks = () => {
     const t = new Date()
     const today = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`
@@ -68,7 +71,35 @@ export default function Dashboard() {
     load()
   }
 
-  useEffect(() => { load(); loadTodayTasks(); api.get('/dashboard/radar').then(r => setRadar(r.data)).catch(() => {}); api.get('/me').then(r => setMe(r.data)).catch(() => {}) }, [])
+  useEffect(() => { load(); loadTodayTasks(); api.get('/dashboard/radar').then(r => setRadar(r.data)).catch(() => {}); api.get('/me').then(r => setMe(r.data)).catch(() => {}); api.get('/papers/deadlines').then(r => setDeadlines(r.data)).catch(() => {}) }, [])
+
+  // 问候语
+  useEffect(() => {
+    const now = new Date()
+    const h = now.getHours()
+    const m = now.getMonth() + 1
+    const d = now.getDate()
+    let msg = ''
+    // 节日判断优先
+    if (m === 1 && d === 1) msg = '🎉 新年快乐！新的一年，新的突破！'
+    else if (m === 5 && d === 1) msg = '💪 五一劳动节，科研人也在奋斗！'
+    else if (m === 5 && d === 4) msg = '🔥 五四青年节，青春正当时！'
+    else if (m === 6 && d === 1) msg = '🎈 六一快乐，保持童心，保持好奇心！'
+    else if (m === 9 && d === 10) msg = '🍎 教师节快乐，感谢每一位导师！'
+    else if (m === 10 && d === 1) msg = '🇨🇳 国庆快乐，科研报国！'
+    else if (m === 12 && d === 25) msg = '🎄 圣诞节快乐，实验室也要有温馨！'
+    // 早晚问候
+    else if (h < 6) msg = '🌙 夜深了，注意休息，明早继续！'
+    else if (h < 9) msg = '🌅 早上好！新的一天，新的科研进展！'
+    else if (h < 12) msg = '☀️ 上午好！今天计划完成什么任务？'
+    else if (h < 14) msg = '🕐 中午好！记得吃饭，补充能量~'
+    else if (h < 18) msg = '🌤 下午好！保持专注，攻克难关！'
+    else if (h < 22) msg = '🌆 晚上好！总结今天，规划明天。'
+    else msg = '🌙 夜深了，注意休息，明早继续！'
+    setGreeting(msg)
+    setShowGreeting(true)
+    setTimeout(() => setShowGreeting(false), 4000)
+  }, [])
 
   const loadCalTasks = (y: number, m: number) => {
     api.get(`/tasks/calendar?year=${y}&month=${m}`).then(r => {
@@ -151,6 +182,14 @@ export default function Dashboard() {
   return (
     <div className="space-y-5">
       <ReviewPopup />
+      {/* 问候弹窗 */}
+      {showGreeting && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 animate-bounce-in">
+          <div className="bg-white/95 dark:bg-slate-800/95 backdrop-blur shadow-xl rounded-2xl px-6 py-4 text-center border border-gray-100 dark:border-slate-700">
+            <div className="text-lg font-medium text-gray-800 dark:text-slate-100">{greeting}</div>
+          </div>
+        </div>
+      )}
       {/* 顶部状态栏 */}
       <div className="flex items-center gap-3 text-xs">
         <span className="bg-white dark:bg-slate-800 rounded-lg px-3 py-1.5 shadow-sm border border-gray-100 dark:border-slate-700 text-gray-600">
@@ -361,8 +400,8 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* 今日健康 */}
-        <div className="card">
-          <div className="text-sm text-gray-500 mb-3">💪 今日健康</div>
+        <div className="card cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all" onClick={() => navigate('/health')}>
+          <div className="text-sm text-gray-500 mb-3">💪 今日健康 <span className="text-xs text-indigo-400 float-right">去打卡 →</span></div>
           <div className="grid grid-cols-3 gap-2 text-center">
             <Stat label="睡眠" value={`${data.health_today.sleep_hours || 0}h`} />
             <Stat label="运动" value={`${data.health_today.exercise_minutes || 0}分`} />
@@ -371,16 +410,70 @@ export default function Dashboard() {
         </div>
 
         {/* 最近灵感 */}
-        <div className="card">
-          <div className="text-sm text-gray-500 mb-3">✨ 最近灵感</div>
+        <div className="card cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all" onClick={() => navigate('/inspiration')}>
+          <div className="text-sm text-gray-500 mb-3">✨ 最近灵感 <span className="text-xs text-indigo-400 float-right">去素材库 →</span></div>
           {data.inspirations.length === 0 && <div className="text-gray-400 text-sm">灵感素材库还是空的</div>}
           <ul className="space-y-2 text-sm">
             {data.inspirations.map((i: any) => (
-              <li key={i.id} className="line-clamp-2 text-gray-700">{i.content || i.title}</li>
+              <li key={i.id} className="line-clamp-2 text-gray-700 hover:text-indigo-600">{i.content || i.title}</li>
             ))}
           </ul>
         </div>
       </div>
+
+      {/* 论文投稿 + 项目截止倒计时 */}
+      {(deadlines.papers?.length > 0 || deadlines.projects?.length > 0) && (
+        <div className="card">
+          <div className="text-sm text-gray-500 mb-3">⏳ 截止倒计时</div>
+          <div className="space-y-3">
+            {deadlines.papers?.length > 0 && (
+              <div>
+                <div className="text-xs text-gray-400 mb-1.5">📄 论文投稿截止</div>
+                <div className="space-y-2">
+                  {deadlines.papers.map((d: any) => (
+                    <div key={`p-${d.id}`} className="flex items-center gap-3 py-1.5 hover:bg-gray-50 dark:hover:bg-slate-700/30 rounded-lg px-2 -mx-2 transition">
+                      <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${d.urgent ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'}`}>{d.days_left}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm text-gray-800 dark:text-slate-200 truncate">{d.title}</div>
+                        <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-2">
+                          {d.target_journal && <span className="truncate">📰 {d.target_journal}</span>}
+                          <span className="text-gray-300">{d.stage} · {d.progress}%</span>
+                        </div>
+                        <div className="h-1 bg-gray-100 rounded-full mt-1 overflow-hidden">
+                          <div className={`h-full rounded-full ${d.urgent ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${d.progress}%` }} />
+                        </div>
+                      </div>
+                      <div className={`text-xs font-medium flex-shrink-0 ${d.urgent ? 'text-amber-600' : 'text-emerald-600'}`}>{d.days_left === 0 ? '今天截止！' : `还剩${d.days_left}天`}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {deadlines.projects?.length > 0 && (
+              <div>
+                <div className="text-xs text-gray-400 mb-1.5">📁 项目结束截止</div>
+                <div className="space-y-2">
+                  {deadlines.projects.map((d: any) => (
+                    <div key={`pj-${d.id}`} className="flex items-center gap-3 py-1.5 hover:bg-gray-50 dark:hover:bg-slate-700/30 rounded-lg px-2 -mx-2 transition">
+                      <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${d.urgent ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'}`}>{d.days_left}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm text-gray-800 dark:text-slate-200 truncate">{d.name}</div>
+                        <div className="text-xs text-gray-400 mt-0.5">
+                          <span className="text-gray-300">{d.status} · {d.progress}%</span>
+                        </div>
+                        <div className="h-1 bg-gray-100 rounded-full mt-1 overflow-hidden">
+                          <div className={`h-full rounded-full ${d.urgent ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${d.progress}%` }} />
+                        </div>
+                      </div>
+                      <div className={`text-xs font-medium flex-shrink-0 ${d.urgent ? 'text-amber-600' : 'text-emerald-600'}`}>{d.days_left === 0 ? '今天结束！' : `还剩${d.days_left}天`}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 最近动态 — 来自 4 个核心模块的聚合数据 */}
       <div className="card">

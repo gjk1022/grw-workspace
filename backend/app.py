@@ -447,6 +447,29 @@ task_crud = CRUD("tasks", ["title", "type", "plan_date", "deadline", "priority",
 goal_crud = CRUD("goals", ["title", "level", "period", "content", "progress", "status", "start_date", "end_date"])
 review_crud = CRUD("reviews", ["period", "title", "completed", "problems", "improvements", "next_steps", "review_date", "review_type", "content"])
 paper_crud = CRUD("papers", ["title", "target_journal", "stage", "progress", "modify_log", "submission_date", "description"])
+
+
+@app.get("/api/papers/deadlines")
+def papers_deadlines():
+    """论文投稿 + 项目截止倒计时（分两组）"""
+    conn = get_db()
+    today = date.today()
+    papers = []
+    for r in conn.execute(
+        "SELECT id, title, target_journal, stage, progress, submission_date FROM papers WHERE submission_date IS NOT NULL AND submission_date >= ? ORDER BY submission_date ASC LIMIT 5",
+        (today.isoformat(),)
+    ).fetchall():
+        d = date.fromisoformat(r["submission_date"])
+        papers.append({"id": r["id"], "title": r["title"], "target_journal": r["target_journal"], "stage": r["stage"], "progress": r["progress"], "submission_date": r["submission_date"], "days_left": (d - today).days, "urgent": (d - today).days <= 7})
+    projects = []
+    for r in conn.execute(
+        "SELECT id, name, status, progress, end_date FROM projects WHERE end_date IS NOT NULL AND status!='done' AND end_date >= ? ORDER BY end_date ASC LIMIT 5",
+        (today.isoformat(),)
+    ).fetchall():
+        d = date.fromisoformat(r["end_date"])
+        projects.append({"id": r["id"], "name": r["name"], "status": r["status"], "progress": r["progress"], "end_date": r["end_date"], "days_left": (d - today).days, "urgent": (d - today).days <= 7})
+    conn.close()
+    return {"papers": papers, "projects": projects}
 literature_crud = CRUD("literatures", ["title", "authors", "source", "year", "status", "tags", "notes", "cite", "doi", "file_path", "read_at", "folder", "depth"])
 note_crud = CRUD("notes", ["literature_id", "title", "abstract", "keywords", "main_content", "innovation", "content", "tags", "background", "method", "weakness", "understanding", "future", "core_conclusion", "personal_insight"])
 meeting_crud = CRUD("meetings", ["meeting_time", "topic", "content", "advisor_opinion", "todos", "next_plan"])

@@ -32,7 +32,7 @@ function monthRange() {
 }
 
 export default function Goals() {
-  const [view, setView] = useState<'day' | 'week' | 'month'>('day')
+  const [view, setView] = useState<'day' | 'week' | 'month' | 'review'>('day')
 
   return (
     <div className="space-y-4">
@@ -41,7 +41,7 @@ export default function Goals() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800 dark:text-slate-100">计划中心</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {view === 'day' ? '日计划 / 今日任务' : view === 'week' ? '周计划 / 周日复盘' : '月计划 / 月末复盘'}
+            {view === 'day' ? '日计划 / 今日任务' : view === 'week' ? '周计划 / 周日复盘' : view === 'month' ? '月计划 / 月末复盘' : '复盘记录 / 周期回顾'}
           </p>
         </div>
       </div>
@@ -52,6 +52,7 @@ export default function Goals() {
           { key: 'day' as const, label: '📅 日', tip: '今日任务' },
           { key: 'week' as const, label: '📆 周', tip: '周日复盘' },
           { key: 'month' as const, label: '🗓️ 月', tip: '月末复盘' },
+          { key: 'review' as const, label: '📝 复盘', tip: '周期回顾' },
         ].map(v => (
           <button key={v.key}
             className={`px-4 py-1.5 text-sm rounded-md font-medium transition ${
@@ -66,6 +67,7 @@ export default function Goals() {
       {view === 'day' && <DayView />}
       {view === 'week' && <WeekView />}
       {view === 'month' && <MonthView />}
+      {view === 'review' && <ReviewView />}
     </div>
   )
 }
@@ -79,7 +81,9 @@ function DayView() {
   const today = todayStr()
 
   const load = () => api.get('/tasks').then(r => {
-    setTasks(r.data || [])
+    const all = r.data || []
+    const dayFiltered = all.filter((t: any) => t.plan_date === today || t.deadline === today || (!t.plan_date && !t.deadline))
+    setTasks(dayFiltered)
   })
 
   const pending = tasks.filter(t => t.status !== 'done')
@@ -110,7 +114,7 @@ function DayView() {
   }
   const save = async (v: any) => {
     if (editing?.id) await api.put(`/tasks/${editing.id}`, v)
-    else await api.post('/tasks', { ...v, plan_date: today })
+    else await api.post('/tasks', { ...v, plan_date: v.plan_date || today })
     setShowAdd(false); setEditing(null); load()
   }
   const del = async (id: number) => { if (!confirm('确认删除？')) return; await api.delete(`/tasks/${id}`); load() }
@@ -124,7 +128,7 @@ function DayView() {
         <button className="btn-primary text-sm" onClick={() => { setEditing(null); setShowAdd(true) }}>＋ 新建任务</button>
       </div>
 
-      {tasks.length === 0 && <div className="card text-center py-12 text-gray-400">今日暂无任务，点击「新建任务」添加</div>}
+      {tasks.length === 0 && <div className="card text-center py-12 text-gray-400">今日暂无任务，点「新建任务」添加<br/><span className="text-xs">提示：可选计划日期创建未来任务</span></div>}
 
       {pending.map(t => (
         <TaskCard key={t.id} t={t} toggling={toggling} onToggle={toggleDone} onEdit={() => { setEditing(t); setShowAdd(true) }} onDel={() => del(t.id)} onProgress={handleProgress} />
@@ -141,6 +145,8 @@ function DayView() {
           <CrudForm
             fields={[
               { key: 'title', label: '标题', required: true, full: true },
+              { key: 'plan_date', label: '计划日期', type: 'date' },
+              { key: 'deadline', label: '截止日期', type: 'date' },
               { key: 'type', label: '类型', options: ['academic', 'reading', 'experiment', 'communication', 'other'] },
               { key: 'priority', label: '优先级', options: ['high', 'medium', 'low'] },
               { key: 'tag', label: '分类标签', options: ['核心科研', '文献阅读', '日常事务', '实验模拟', '论文写作', '组会准备', '离上岸更近', '自我提升'] },
@@ -161,12 +167,29 @@ function WeekView() {
   const { start, end } = weekRange()
   const isSunday = new Date().getDay() === 0
   const [showReview, setShowReview] = useState(false)
+  const [showAdd, setShowAdd] = useState(false)
+  const [editing, setEditing] = useState<any>(null)
   const [review, setReview] = useState('')
+  const [toggling, setToggling] = useState<number | null>(null)
 
   const load = () => api.get('/tasks').then(r => {
     setTasks(r.data.filter((t: any) => (t.plan_date >= start && t.plan_date <= end) || (t.deadline >= start && t.deadline <= end)))
   })
   useEffect(() => { load() }, [])
+
+  const toggleDone = async (t: any) => {
+    setToggling(t.id)
+    await api.put(`/tasks/${t.id}`, { status: t.status === 'done' ? 'pending' : 'done', progress: t.status === 'done' ? 0 : 100 })
+    setToggling(null); load()
+  }
+  const handleProgress = async (t: any, val?: number) => {
+    if (val !== undefined) {
+      await api.put(`/tasks/${t.id}`, { progress: val }).catch(() => {})
+      load()
+    }
+  }
+  const del = async (id: number) => { if (!confirm('确认删除？')) return; await api.delete(`/tasks/${id}`); load() }
+  const save = async (v: any) => { if (editing?.id) await api.put(`/tasks/${editing.id}`, v); setShowAdd(false); setEditing(null); load() }
 
   const saveReview = async () => {
     if (!review.trim()) return
@@ -187,7 +210,7 @@ function WeekView() {
         <div className="card text-center py-12 text-gray-400">本周暂无任务</div>
       ) : (
         <div className="space-y-1.5">
-          {tasks.map(t => <TaskCardReadOnly key={t.id} t={t} />)}
+          {tasks.map(t => <TaskCard key={t.id} t={t} toggling={toggling} onToggle={toggleDone} onEdit={() => { setEditing(t); setShowAdd(true) }} onDel={() => del(t.id)} onProgress={handleProgress} />)}
         </div>
       )}
 
@@ -213,6 +236,24 @@ function WeekView() {
         </div>
       )}
       {!isSunday && <div className="text-xs text-gray-400 text-center py-4">周日在此处写周复盘</div>}
+
+      {showAdd && (
+        <Modal onClose={() => setShowAdd(false)} title="编辑任务">
+          <CrudForm
+            fields={[
+              { key: 'title', label: '标题', required: true, full: true },
+              { key: 'plan_date', label: '计划日期', type: 'date' },
+              { key: 'deadline', label: '截止日期', type: 'date' },
+              { key: 'type', label: '类型', options: ['academic', 'reading', 'experiment', 'communication', 'other'] },
+              { key: 'priority', label: '优先级', options: ['high', 'medium', 'low'] },
+              { key: 'tag', label: '分类标签', options: ['核心科研', '文献阅读', '日常事务', '实验模拟', '论文写作', '组会准备', '离上岸更近', '自我提升'] },
+              { key: 'description', label: '描述', type: 'textarea', full: true }
+            ]}
+            initial={editing}
+            onSubmit={save} onCancel={() => setShowAdd(false)}
+          />
+        </Modal>
+      )}
     </div>
   )
 }
@@ -222,12 +263,29 @@ function MonthView() {
   const [tasks, setTasks] = useState<any[]>([])
   const { first, last, isLastDay } = monthRange()
   const [showReview, setShowReview] = useState(false)
+  const [showAdd, setShowAdd] = useState(false)
+  const [editing, setEditing] = useState<any>(null)
   const [review, setReview] = useState('')
+  const [toggling, setToggling] = useState<number | null>(null)
 
   const load = () => api.get('/tasks').then(r => {
     setTasks(r.data.filter((t: any) => (t.plan_date >= first && t.plan_date <= last)))
   })
   useEffect(() => { load() }, [])
+
+  const toggleDone = async (t: any) => {
+    setToggling(t.id)
+    await api.put(`/tasks/${t.id}`, { status: t.status === 'done' ? 'pending' : 'done', progress: t.status === 'done' ? 0 : 100 })
+    setToggling(null); load()
+  }
+  const handleProgress = async (t: any, val?: number) => {
+    if (val !== undefined) {
+      await api.put(`/tasks/${t.id}`, { progress: val }).catch(() => {})
+      load()
+    }
+  }
+  const del = async (id: number) => { if (!confirm('确认删除？')) return; await api.delete(`/tasks/${id}`); load() }
+  const save = async (v: any) => { if (editing?.id) await api.put(`/tasks/${editing.id}`, v); setShowAdd(false); setEditing(null); load() }
 
   const saveReview = async () => {
     if (!review.trim()) return
@@ -248,7 +306,7 @@ function MonthView() {
         <div className="card text-center py-12 text-gray-400">本月暂无任务</div>
       ) : (
         <div className="space-y-1.5">
-          {tasks.map(t => <TaskCardReadOnly key={t.id} t={t} />)}
+          {tasks.map(t => <TaskCard key={t.id} t={t} toggling={toggling} onToggle={toggleDone} onEdit={() => { setEditing(t); setShowAdd(true) }} onDel={() => del(t.id)} onProgress={handleProgress} />)}
         </div>
       )}
 
@@ -273,6 +331,132 @@ function MonthView() {
         </div>
       )}
       {!isLastDay && <div className="text-xs text-gray-400 text-center py-4">月末在此处写月复盘</div>}
+
+      {showAdd && (
+        <Modal onClose={() => setShowAdd(false)} title="编辑任务">
+          <CrudForm
+            fields={[
+              { key: 'title', label: '标题', required: true, full: true },
+              { key: 'plan_date', label: '计划日期', type: 'date' },
+              { key: 'deadline', label: '截止日期', type: 'date' },
+              { key: 'type', label: '类型', options: ['academic', 'reading', 'experiment', 'communication', 'other'] },
+              { key: 'priority', label: '优先级', options: ['high', 'medium', 'low'] },
+              { key: 'tag', label: '分类标签', options: ['核心科研', '文献阅读', '日常事务', '实验模拟', '论文写作', '组会准备', '离上岸更近', '自我提升'] },
+              { key: 'description', label: '描述', type: 'textarea', full: true }
+            ]}
+            initial={editing}
+            onSubmit={save} onCancel={() => setShowAdd(false)}
+          />
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+// ===== 复盘记录视图 =====
+function ReviewView() {
+  const [reviews, setReviews] = useState<any[]>([])
+  const [show, setShow] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [f, setF] = useState<any>({ review_date: todayStr(), review_type: 'weekly', title: '', completed: '', problems: '', improvements: '', next_steps: '' })
+  const today = todayStr()
+
+  const load = () => api.get('/reviews').then(r => setReviews(r.data || [])).catch(() => {})
+  useEffect(() => { load() }, [])
+
+  const save = async () => {
+    if (!f.title.trim()) { alert('请填写标题'); return }
+    if (editingId) {
+      await api.put(`/reviews/${editingId}`, f)
+    } else {
+      await api.post('/reviews', f)
+    }
+    setShow(false); setEditingId(null)
+    setF({ review_date: today, review_type: 'weekly', title: '', completed: '', problems: '', improvements: '', next_steps: '' })
+    load()
+  }
+
+  const openEdit = (r: any) => {
+    setF({ review_date: r.review_date, review_type: r.review_type, title: r.title, completed: r.completed || '', problems: r.problems || '', improvements: r.improvements || '', next_steps: r.next_steps || '' })
+    setEditingId(r.id)
+    setShow(true)
+  }
+
+  const del = async (id: number) => { if (confirm('确认删除？')) { await api.delete(`/reviews/${id}`); load() } }
+
+  const TYPES: Record<string, string> = { weekly: '📆 周复盘', monthly: '🗓️ 月复盘', quarterly: '📊 季复盘', yearly: '🎯 年复盘' }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-gray-500">{reviews.length} 条复盘记录</div>
+        <button className="btn-primary text-sm" onClick={() => { setEditingId(null); setF({ review_date: today, review_type: 'weekly', title: '', completed: '', problems: '', improvements: '', next_steps: '' }); setShow(true) }}>＋ 新复盘</button>
+      </div>
+
+      {reviews.length === 0 && <div className="card text-center py-12 text-gray-400">暂无复盘记录，点击「＋ 新复盘」创建</div>}
+
+      {reviews.map((r: any) => (
+        <div key={r.id} className="card space-y-2 group">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600">{TYPES[r.review_type] || '📝 复盘'}</span>
+              <span className="text-xs text-gray-400">{r.review_date}</span>
+            </div>
+            <div className="flex items-center gap-2">
+            <button className="text-xs text-gray-400 hover:text-indigo-500 opacity-0 group-hover:opacity-100 transition" onClick={() => openEdit(r)}>编辑</button>
+            <button className="text-xs text-gray-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition" onClick={() => del(r.id)}>删除</button>
+            </div>
+          </div>
+          <h3 className="font-semibold text-gray-800 dark:text-slate-200">{r.title}</h3>
+          {r.completed && <div className="text-sm"><span className="text-emerald-600 font-medium">✅ 完成：</span><span className="text-gray-600 dark:text-slate-400">{r.completed}</span></div>}
+          {r.problems && <div className="text-sm"><span className="text-rose-600 font-medium">⚠️ 问题：</span><span className="text-gray-600 dark:text-slate-400">{r.problems}</span></div>}
+          {r.improvements && <div className="text-sm"><span className="text-amber-600 font-medium">💡 改进：</span><span className="text-gray-600 dark:text-slate-400">{r.improvements}</span></div>}
+          {r.next_steps && <div className="text-sm"><span className="text-indigo-600 font-medium">📋 下一步：</span><span className="text-gray-600 dark:text-slate-400">{r.next_steps}</span></div>}
+        </div>
+      ))}
+
+      {show && (
+        <Modal onClose={() => { setShow(false); setEditingId(null) }} title={editingId ? '编辑复盘' : '新建复盘'}>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">复盘类型</label>
+                <select className="input" value={f.review_type} onChange={e => setF({...f, review_type: e.target.value})}>
+                  {Object.entries(TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">复盘日期</label>
+                <input type="date" className="input" value={f.review_date} onChange={e => setF({...f, review_date: e.target.value})} />
+              </div>
+            </div>
+            <div>
+              <label className="label">标题 *</label>
+              <input className="input" value={f.title} onChange={e => setF({...f, title: e.target.value})} placeholder={`${TYPES[f.review_type]} · ${f.review_date}`} />
+            </div>
+            <div>
+              <label className="label">✅ 已完成</label>
+              <textarea className="input min-h-[60px] text-sm" value={f.completed} onChange={e => setF({...f, completed: e.target.value})} placeholder="完成的任务和成果…" />
+            </div>
+            <div>
+              <label className="label">⚠️ 遇到的问题</label>
+              <textarea className="input min-h-[60px] text-sm" value={f.problems} onChange={e => setF({...f, problems: e.target.value})} placeholder="遇到的困难和障碍…" />
+            </div>
+            <div>
+              <label className="label">💡 改进措施</label>
+              <textarea className="input min-h-[60px] text-sm" value={f.improvements} onChange={e => setF({...f, improvements: e.target.value})} placeholder="如何改进…" />
+            </div>
+            <div>
+              <label className="label">📋 下一步计划</label>
+              <textarea className="input min-h-[60px] text-sm" value={f.next_steps} onChange={e => setF({...f, next_steps: e.target.value})} placeholder="下一步要做什么…" />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button className="btn-ghost" onClick={() => { setShow(false); setEditingId(null) }}>取消</button>
+              <button className="btn-primary" onClick={save}>保存复盘</button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
@@ -338,12 +522,3 @@ function TaskCard({ t, toggling, onToggle, onEdit, onDel, onProgress }: any) {
   )
 }
 
-function TaskCardReadOnly({ t }: any) {
-  return (
-    <div className={`card flex items-center gap-3 py-2.5 px-4 text-sm ${t.status === 'done' ? 'opacity-60' : ''}`}>
-      <span className={`w-4 h-4 rounded-full flex-shrink-0 ${t.status === 'done' ? 'bg-emerald-500' : t.priority === 'high' ? 'bg-rose-400' : 'bg-gray-300'}`} />
-      <span className={`flex-1 ${t.status === 'done' ? 'line-through text-gray-400' : 'text-gray-700 dark:text-slate-300'}`}>{t.title}</span>
-      <span className="text-xs text-gray-400">{t.plan_date}</span>
-    </div>
-  )
-}

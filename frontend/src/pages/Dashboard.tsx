@@ -4,6 +4,7 @@ import ReactECharts from 'echarts-for-react'
 import api, { awardPoints } from '../lib/api'
 import { Sparkles, TrendingUp } from '../components/icons'
 import ClockWidget from '../components/ClockWidget'
+import { LUNAR_MAP } from '../lib/lunar'
 import { MonthCalendar, CalendarLegend, CalTask, dateKey } from '../components/Calendar'
 import ReviewPopup from '../components/ReviewPopup'
 
@@ -194,6 +195,7 @@ export default function Dashboard() {
       <div className="flex items-center gap-3 text-xs">
         <span className="bg-white dark:bg-slate-800 rounded-lg px-3 py-1.5 shadow-sm border border-gray-100 dark:border-slate-700 text-gray-600">
           📅 {(() => { const n=new Date(); return `${n.getFullYear()}年${n.getMonth()+1}月${n.getDate()}日 周${'日一二三四五六'[n.getDay()]}` })()}
+          <span className="text-gray-400 text-[10px]">{(() => { const n=new Date(); const k=`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; return LUNAR_MAP[k]||''; })()}</span>
         </span>
         <span className="bg-white dark:bg-slate-800 rounded-lg px-3 py-1.5 shadow-sm border border-gray-100 dark:border-slate-700 text-gray-600">
           📚 {(() => { if(!me?.semester_start) return '未设置'; const n=new Date(),s=new Date(me.semester_start); const w=Math.max(1,Math.ceil((n.getTime()-s.getTime())/(7*86400000))+1); return n<s?`距开学${Math.ceil((s.getTime()-n.getTime())/86400000)}天`:`第${w}周` })()}

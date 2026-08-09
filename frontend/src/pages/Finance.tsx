@@ -10,6 +10,8 @@ const MAIN_CATS = [
     subs: ['买书', '版面费', '参会差旅', '实验耗材', '软件许可', '培训课程', '其他'] },
   { key: 'reimburse', label: '💰 待报销', color: 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300',
     subs: ['会议注册费', '差旅垫付', '实验采购', '办公用品', '其他'] },
+  { key: 'income', label: '💵 收入来源', color: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300',
+    subs: ['奖学金', '劳务费', '兼职收入', '稿费', '红包', '投资理财', '其他'] },
 ]
 
 export default function Finance() {
@@ -45,8 +47,10 @@ export default function Finance() {
 
   // 三级统计
   const totals: Record<string, number> = {}
+let totalIncome = 0
   filtered.forEach(r => {
     if (r.type === 'expense') totals[r.main_category || 'living'] = (totals[r.main_category || 'living'] || 0) + Number(r.amount)
+    else if (r.type === 'income') totalIncome += Number(r.amount)
   })
 
   // 月度
@@ -95,14 +99,14 @@ export default function Finance() {
       </div>
 
       {/* 三级分类汇总卡片 */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         {MAIN_CATS.map(c => {
           const total = totals[c.key] || 0
           return (
             <div key={c.key} className={`card text-center ${c.color} bg-opacity-50`}>
               <div className="text-lg">{c.label.slice(0,2)}</div>
               <div className="text-sm mt-1">{c.label.slice(2)}</div>
-              <div className="text-xl font-bold mt-1">¥{total.toFixed(0)}</div>
+              <div className="text-xl font-bold mt-1">¥{(typeof totalIncome !== 'undefined' || total !== 0) ? total.toFixed(0):0}</div>
             </div>
           )
         })}
@@ -151,6 +155,22 @@ export default function Finance() {
               <input type="date" className="input" value={form.finance_date} onChange={e => setForm({...form, finance_date: e.target.value})} />
             </div>
             <div>
+              <label className="label">类型</label>
+              <div className="flex gap-2">
+                <button type="button"
+                  className={`flex-1 text-sm px-3 py-2 rounded-lg border transition ${form.type === 'expense' ? 'bg-rose-50 border-rose-400 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300' : 'border-gray-200 dark:border-slate-600 text-gray-500'}`}
+                  onClick={() => setForm({...form, type: 'expense', main_category: 'living', category: ''})}>
+                  📤 支出
+                </button>
+                <button type="button"
+                  className={`flex-1 text-sm px-3 py-2 rounded-lg border transition ${form.type === 'income' ? 'bg-emerald-50 border-emerald-400 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300' : 'border-gray-200 dark:border-slate-600 text-gray-500'}`}
+                  onClick={() => setForm({...form, type: 'income', main_category: 'income', category: ''})}>
+                  📥 收入
+                </button>
+              </div>
+            </div>
+            {form.type === 'expense' ? (<>
+            <div>
               <label className="label">一级分类</label>
               <div className="grid grid-cols-3 gap-2">
                 {MAIN_CATS.map(c => (
@@ -175,12 +195,27 @@ export default function Finance() {
                 value={subs.includes(form.category) ? '' : form.category}
                 onChange={e => setForm({...form, category: e.target.value})} />
             </div>
+            </> ) : (
             <div>
-              <label className="label">金额</label>
+              <label className="label">收入分类</label>
+              <div className="flex flex-wrap gap-1.5">
+                {MAIN_CATS.find(c => c.key === 'income')!.subs.map(s => (
+                  <button key={s} type="button"
+                    className={`text-xs px-2.5 py-1 rounded-full border transition ${form.category === s ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600' : 'border-gray-200 dark:border-slate-600 text-gray-500'}`}
+                    onClick={() => setForm({...form, category: s})}>{s}</button>
+                ))}
+              </div>
+              <input className="input text-sm mt-2" placeholder="或自定义输入…"
+                value={subs.includes(form.category) ? '' : form.category}
+                onChange={e => setForm({...form, category: e.target.value})} />
+            </div>
+            )}
+            <div>
+              <label className="label">金额（元）</label>
               <input type="number" className="input" value={form.amount} onChange={e => setForm({...form, amount: e.target.value})} placeholder="0.00" />
             </div>
             <div>
-              <label className="label">备注（待报销请注明用途）</label>
+              <label className="label">备注</label>
               <textarea className="input min-h-[50px] text-sm" value={form.note} onChange={e => setForm({...form, note: e.target.value})} />
             </div>
             <div className="flex justify-end gap-2">

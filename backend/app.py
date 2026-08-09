@@ -3,12 +3,15 @@
 FastAPI + SQLite
 """
 import os
+from pathlib import Path
 import calendar as _cal
 import sqlite3
 from datetime import datetime, date, timedelta
 from typing import Optional, List
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
+from fastapi.responses import FileResponse
+from fastapi import Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -78,6 +81,8 @@ def init_db():
         improvements TEXT,
         next_steps TEXT,
         review_date TEXT,
+        review_type TEXT DEFAULT 'weekly',
+        content TEXT,
         created_at TEXT
     );
     CREATE TABLE IF NOT EXISTS papers (
@@ -271,6 +276,9 @@ def init_db():
             cur.execute(f"ALTER TABLE literatures ADD COLUMN {col[0]} {col[1]}")
         except:
             pass
+    for col in ['review_type TEXT DEFAULT \'weekly\'', 'content TEXT']:
+        try: cur.execute(f"ALTER TABLE reviews ADD COLUMN {col}")
+        except: pass
     try: cur.execute("ALTER TABLE users ADD COLUMN stage TEXT DEFAULT '研一'")
     except: pass
     try: cur.execute("ALTER TABLE literatures ADD COLUMN folder TEXT DEFAULT ''")
@@ -411,7 +419,7 @@ class CRUD:
             raise HTTPException(404, "Not Found")
         return row_to_dict(row)
 
-    def create(self, payload: dict):
+    def create(self, payload: dict = Body(...)):
         data = {k: payload.get(k) for k in self.allowed}
         data["created_at"] = now_str()
         cols = ",".join(data.keys())
@@ -423,7 +431,7 @@ class CRUD:
         conn.close()
         return self.get(new_id)
 
-    def update(self, item_id: int, payload: dict):
+    def update(self, item_id: int, payload: dict = Body(...)):
         data = {k: payload.get(k) for k in self.allowed if k in payload}
         if not data:
             return self.get(item_id)
@@ -1105,7 +1113,7 @@ def dashboard():
     out["points_week"] = pts or 0
 
     # ---------- 日期信息 ----------
-    weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
+    weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
     out["date_str"] = f"{today_date.year}年{today_date.month}月{today_date.day}日 {weekdays[weekday]}"
     out["date_subtitle"] = f"已学习 {out['study_minutes_today'] // 60} 小时 {out['study_minutes_today'] % 60} 分钟" if out["study_minutes_today"] else "今天还没有签到学习哦"
 
@@ -1637,10 +1645,23 @@ def day_overview(date: str):
     }
 
 
-# ---------- 健康检查 ----------
+# ---------- 健康检查 / 前端首页 ----------
 @app.get("/")
 def root():
+    dist_index = Path(__file__).resolve().parent.parent / "frontend" / "dist" / "index.html"
+    if dist_index.exists():
+        return FileResponse(dist_index)
     return {"message": "硕博成长工作台 API 运行中", "version": "1.0.0"}
+
+
+# ---------- 静态前端（生产模式）----------
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+if FRONTEND_DIR.exists():
+    import mimetypes
+    mimetypes.add_type("application/javascript", ".js")
+    mimetypes.add_type("application/javascript", ".mjs")
+    mimetypes.add_type("text/css", ".css")
+    app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="assets")
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 """
-GRW 服务看门狗 — 自动启动前后端，崩溃后自动重启
+GRW 服务看门狗 — 前后端双进程（Vite dev + FastAPI）
 """
 import subprocess
 import os
@@ -37,10 +37,10 @@ def main():
     time.sleep(2)
     fe = start_frontend()
     time.sleep(4)
-    print(f"[watchdog] Backend PID={be.pid}  Frontend PID={fe.pid}  — watching...", flush=True)
+    print(f"[watchdog] BE PID={be.pid} · http://localhost:8000", flush=True)
+    print(f"[watchdog] FE PID={fe.pid} · http://localhost:5173", flush=True)
 
     crashes = {"backend": 0, "frontend": 0}
-
     try:
         while True:
             if be.poll() is not None:

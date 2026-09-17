@@ -19,11 +19,16 @@ export default function Settings() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [apiBase, setApiBase] = useState('')
+  // 云端备份（GitHub 私有仓库）
+  const [busy, setBusy] = useState(false)
+  const [cloudInfo, setCloudInfo] = useState<any>(null)
+  const [lastSync, setLastSync] = useState('')
 
   useEffect(() => {
     api.get('/me').then(r => setMe(r.data)).catch(() => {})
     setLastSync(localStorage.getItem('grw_last_sync') || '')
     setApiBase(localStorage.getItem('grw_api_base') || '')
+    api.get('/backup/cloud').then(r => setCloudInfo(r.data)).catch(() => setCloudInfo({ ok: false, message: '读取云端备份失败' }))
   }, [])
 
   const saveApiBase = () => {
@@ -34,64 +39,47 @@ export default function Settings() {
     window.location.reload()
   }
 
-  // 云端数据同步（含冲突检测）
-  const [syncing, setSyncing] = useState(false)
-  const [lastSync, setLastSync] = useState('')
-  const [syncConflict, setSyncConflict] = useState<any>(null)
-
-  const CLOUD_API = 'https://grw-workspace-production.up.railway.app/api'
-
-  const fetchAll = async (baseURL: string) => {
+  const loadCloudInfo = async () => {
     try {
-      const r = await fetch(`${baseURL}/export?format=json`)
-      if (!r.ok) return null
-      return (await r.json()).data
-    } catch { return null }
+      const r = await api.get('/backup/cloud')
+      setCloudInfo(r.data)
+    } catch {
+      setCloudInfo({ ok: false, message: '读取云端备份失败' })
+    }
   }
 
-  const doSync = async () => {
-    setSyncing(true)
+  const doBackupNow = async () => {
+    setBusy(true)
     try {
-      const localData = await fetchAll('http://localhost:8000/api')
-      const cloudData = await fetchAll(CLOUD_API)
-      if (!cloudData) { alert('云端不可达，请稍后再试'); setSyncing(false); return }
-      if (!localData) {
-        const ask = confirm('未检测到本地后端。\n确定将云端数据拉取到当前后端？')
-        if (ask) { await api.post('/import', { data: cloudData }); alert('同步完成！云端数据已拉取。') }
-      } else {
-        const localTotal = Object.values(localData).reduce((s: number, arr: any) => s + (Array.isArray(arr) ? arr.length : 0), 0)
-        const cloudTotal = Object.values(cloudData).reduce((s: number, arr: any) => s + (Array.isArray(arr) ? arr.length : 0), 0)
-        if (localTotal !== cloudTotal) {
-          setSyncConflict({ localData, cloudData, localTotal, cloudTotal })
-          setSyncing(false); return
-        } else {
-          alert('本机和云端数据一致，无需同步。')
-        }
+      const r = await api.post('/backup/run')
+      alert((r.data.ok ? '✅ ' : '⚠️ ') + r.data.message)
+      if (r.data.ok) {
+        const now = new Date().toLocaleString('zh-CN', { hour12: false })
+        setLastSync(now); localStorage.setItem('grw_last_sync', now)
+        loadCloudInfo()
       }
-      const now = new Date().toLocaleString('zh-CN', { hour12: false })
-      setLastSync(now); localStorage.setItem('grw_last_sync', now)
     } catch (e: any) {
-      alert('同步失败：' + e.message)
+      alert('备份失败：' + (e.response?.data?.detail || e.message))
     }
-    setSyncing(false)
+    setBusy(false)
   }
 
-  const resolveSync = async (choice: 'local' | 'cloud') => {
-    if (!syncConflict) return
-    const targetData = choice === 'local' ? syncConflict.localData : syncConflict.cloudData
-    const targetAPI = choice === 'local' ? CLOUD_API : 'http://localhost:8000/api'
+  const doRestore = async (file?: string) => {
+    const label = file || '最新一份'
+    if (!confirm(`确定从云端「${label}」恢复数据？\n\n⚠️ 本机当前数据将被覆盖，请谨慎操作。`)) return
+    setBusy(true)
     try {
-      await fetch(`${targetAPI}/import`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: targetData })
-      })
-      alert(`已使用${choice === 'local' ? '本机' : '云端'}数据同步完成！`)
-      const now = new Date().toLocaleString('zh-CN', { hour12: false })
-      setLastSync(now); localStorage.setItem('grw_last_sync', now)
+      const r = await api.post('/backup/restore', { file: file || null })
+      if (r.data.ok) {
+        alert(`✅ 已从 ${r.data.file} 恢复 ${r.data.imported} 条记录\n页面即将刷新`)
+        window.location.reload()
+      } else {
+        alert('⚠️ ' + r.data.message)
+      }
     } catch (e: any) {
-      alert('同步失败：' + e.message)
+      alert('恢复失败：' + (e.response?.data?.detail || e.message))
     }
-    setSyncConflict(null)
+    setBusy(false)
   }
 
   const save = async (e: React.FormEvent) => {
@@ -185,16 +173,34 @@ export default function Settings() {
         <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-white opacity-10" />
         <div className="absolute right-12 bottom-4 w-20 h-20 rounded-full bg-white opacity-5" />
         <div className="relative">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-lg">☁️</span>
-            <h3 className="font-bold text-lg">数据同步</h3>
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">☁️</span>
+              <h3 className="font-bold text-lg">云端备份</h3>
+            </div>
+            <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">
+              {cloudInfo?.ok ? `${cloudInfo.count} 份备份` : '未连接'}
+            </span>
           </div>
-          <p className="text-sm text-white/80 mb-4">将你的记录同步到云端，在其他设备上继续使用。</p>
-          <button className="bg-white/20 hover:bg-white/30 text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
-            disabled={syncing} onClick={doSync}>
-            {syncing ? <><span className="animate-spin">⟳</span> 同步中…</> : '☁️ 立即同步'}
-          </button>
-          <div className="text-xs text-white/70 mt-3">上次同步：{lastSync || '从未同步'}</div>
+          <p className="text-sm text-white/80 mb-1">GitHub 私有仓库 · 每天 20:00 自动备份</p>
+          {cloudInfo?.ok && cloudInfo.files?.[0] ? (
+            <p className="text-xs text-white/70 mb-4">
+              最新：{cloudInfo.files[0].name}（{(cloudInfo.files[0].size / 1024).toFixed(1)} KB）
+            </p>
+          ) : (
+            <p className="text-xs text-amber-100 mb-4">{cloudInfo?.message || '正在读取…'}</p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <button className="bg-white/20 hover:bg-white/30 text-white text-sm px-4 py-2 rounded-lg disabled:opacity-50"
+              disabled={busy} onClick={doBackupNow}>
+              {busy ? '处理中…' : '⬆️ 立即备份'}
+            </button>
+            <button className="bg-white/20 hover:bg-white/30 text-white text-sm px-4 py-2 rounded-lg disabled:opacity-50"
+              disabled={busy || !cloudInfo?.ok} onClick={() => doRestore()}>
+              ⬇️ 从云端恢复
+            </button>
+          </div>
+          <div className="text-xs text-white/70 mt-3">上次备份：{lastSync || '从未备份'}</div>
         </div>
       </div>
 
@@ -228,23 +234,6 @@ export default function Settings() {
         </p>
       </div>
 
-      {/* 同步冲突对话框 */}
-      {syncConflict && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setSyncConflict(null)}>
-          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="text-center mb-4">
-              <div className="text-4xl mb-2">🔄</div>
-              <h3 className="font-bold text-lg text-gray-800 dark:text-slate-100">检测到数据差异</h3>
-              <p className="text-sm text-gray-500 mt-2">本机和云端的部分记录内容不一致，<br/>请选择本次同步以哪边的数据为准。</p>
-            </div>
-            <div className="space-y-2">
-              <button className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-2.5 rounded-lg font-medium" onClick={() => resolveSync('local')}>📱 使用本机数据（覆盖云端）</button>
-              <button className="w-full border border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 py-2.5 rounded-lg" onClick={() => resolveSync('cloud')}>☁️ 使用云端数据（覆盖本机）</button>
-              <button className="w-full text-gray-400 hover:text-gray-600 py-2 text-sm" onClick={() => setSyncConflict(null)}>取消同步</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

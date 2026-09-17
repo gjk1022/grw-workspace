@@ -757,11 +757,9 @@ def export_all(format: str = "json"):
     return {"format": "json", "data": data}
 
 
-@app.post("/api/import")
-async def import_data(request: Request):
-    """导入 JSON 或 Markdown 格式数据，覆盖已有表"""
+def apply_import(body: dict) -> int:
+    """把导入数据写入数据库，返回导入条数。供 /api/import 与 /api/backup/restore 复用。"""
     import re
-    body = await request.json() if "application/json" in (request.headers.get("content-type","")) else {"raw": (await request.body()).decode("utf-8")}
     conn = get_db()
     imported = 0
 
@@ -813,7 +811,152 @@ async def import_data(request: Request):
 
     conn.commit()
     conn.close()
-    return {"ok": True, "imported": imported}
+    return imported
+
+
+@app.post("/api/import")
+async def import_data(request: Request):
+    """导入 JSON 或 Markdown 格式数据，覆盖已有表"""
+    body = await request.json() if "application/json" in (request.headers.get("content-type", "")) else {"raw": (await request.body()).decode("utf-8")}
+    return {"ok": True, "imported": apply_import(body)}
+
+
+# ---------- 云端备份（GitHub 私有仓库） ----------
+ROOT_DIR = os.path.dirname(BASE_DIR)
+BACKUP_CONFIG_PATH = os.path.join(ROOT_DIR, ".backup-config.json")
+
+
+def load_backup_cfg() -> dict:
+    try:
+        with open(BACKUP_CONFIG_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def gh_api(path: str, cfg: dict):
+    """调用 GitHub API（私有仓库）"""
+    token = cfg.get("github_token", "")
+    req = urllib.request.Request(
+        "https://api.github.com" + path,
+        headers={
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "grw-workspace",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read().decode())
+
+
+@app.get("/api/backup/cloud")
+def backup_cloud_list():
+    """列出 GitHub 私有仓库里的备份文件"""
+    cfg = load_backup_cfg()
+    repo = cfg.get("github_repo")
+    if not repo or not cfg.get("github_token"):
+        return {"ok": False, "message": "未配置 GitHub 备份", "files": []}
+    try:
+        items = gh_api(f"/repos/{repo}/contents/", cfg)
+        files = [
+            {"name": it["name"], "size": it["size"], "sha": it["sha"]}
+            for it in items
+            if isinstance(it, dict) and it.get("name", "").endswith(".json")
+        ]
+        files.sort(key=lambda x: x["name"], reverse=True)
+        return {"ok": True, "repo": repo, "files": files, "count": len(files)}
+    except Exception as e:
+        return {"ok": False, "message": f"读取失败: {str(e)[:200]}", "files": []}
+
+
+class RestoreReq(BaseModel):
+    file: Optional[str] = None  # 不指定则用最新一份
+
+
+@app.post("/api/backup/restore")
+def backup_restore(body: RestoreReq):
+    """从 GitHub 私有仓库恢复数据（默认取最新一份快照）"""
+    cfg = load_backup_cfg()
+    repo = cfg.get("github_repo")
+    if not repo or not cfg.get("github_token"):
+        return {"ok": False, "message": "未配置 GitHub 备份"}
+    try:
+        if body.file:
+            target = body.file
+        else:
+            items = gh_api(f"/repos/{repo}/contents/", cfg)
+            names = sorted(
+                [it["name"] for it in items if isinstance(it, dict) and it.get("name", "").endswith(".json")],
+                reverse=True,
+            )
+            if not names:
+                return {"ok": False, "message": "云端暂无备份文件"}
+            target = names[0]
+
+        info = gh_api(f"/repos/{repo}/contents/{target}", cfg)
+        import base64 as _b64
+        raw = _b64.b64decode(info["content"]).decode("utf-8")
+        payload = json.loads(raw)
+        n = apply_import(payload)
+        return {"ok": True, "file": target, "imported": n}
+    except Exception as e:
+        return {"ok": False, "message": f"恢复失败: {str(e)[:200]}"}
+
+
+@app.post("/api/backup/run")
+def backup_run_now():
+    """立即执行一次备份（导出 → 本地快照 → 推送 GitHub）"""
+    try:
+        raw = urllib.request.urlopen("http://localhost:8000/api/export?format=json", timeout=15).read()
+    except Exception as e:
+        return {"ok": False, "message": f"导出失败: {str(e)[:150]}"}
+
+    snapshot_ok = False
+    try:
+        backup_dir = os.path.join(ROOT_DIR, "backups")
+        os.makedirs(backup_dir, exist_ok=True)
+        fname = datetime.now().strftime("%Y-%m-%d_%H-%M-%S.json")
+        with open(os.path.join(backup_dir, fname), "wb") as f:
+            f.write(raw)
+        snapshot_ok = True
+    except Exception:
+        pass
+
+    cfg = load_backup_cfg()
+    token = cfg.get("github_token", "")
+    repo = cfg.get("github_repo", "")
+    pushed = False
+    msg = ""
+    if token and repo:
+        try:
+            import base64 as _b64
+            fname = datetime.now().strftime("%Y-%m-%d_%H-%M-%S.json")
+            gh_req = urllib.request.Request(
+                f"https://api.github.com/repos/{repo}/contents/{fname}",
+                data=json.dumps({
+                    "message": f"backup {fname}",
+                    "content": _b64.b64encode(raw).decode(),
+                    "branch": "main",
+                }).encode(),
+                headers={
+                    "Authorization": f"token {token}",
+                    "Accept": "application/vnd.github+json",
+                    "User-Agent": "grw-workspace",
+                    "Content-Type": "application/json",
+                },
+                method="PUT",
+            )
+            urllib.request.urlopen(gh_req, timeout=40)
+            pushed = True
+        except Exception as e:
+            msg = str(e)[:150]
+
+    return {
+        "ok": pushed or snapshot_ok,
+        "github": pushed,
+        "snapshot": snapshot_ok,
+        "message": ("已推送到 GitHub" if pushed else f"仅本地快照 ({msg})" if snapshot_ok else "备份失败"),
+    }
 
 
 @app.put("/api/me/settings")

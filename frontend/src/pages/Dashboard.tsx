@@ -198,7 +198,7 @@ export default function Dashboard() {
           <span className="text-gray-400 text-[10px]">{(() => { const n=new Date(); const k=`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; return LUNAR_MAP[k]||''; })()}</span>
         </span>
         <span className="bg-white dark:bg-slate-800 rounded-lg px-3 py-1.5 shadow-sm border border-gray-100 dark:border-slate-700 text-gray-600">
-          📚 {(() => { if(!me?.semester_start) return '未设置'; const n=new Date(),s=new Date(me.semester_start); const w=Math.max(1,Math.ceil((n.getTime()-s.getTime())/(7*86400000))+1); return n<s?`距开学${Math.ceil((s.getTime()-n.getTime())/86400000)}天`:`第${w}周` })()}
+          📚 {(() => { if(!me?.semester_start) return '未设置'; const n=new Date(),s=new Date(me.semester_start); const dayDiff=Math.floor((n.getTime()-s.getTime())/86400000); const w=Math.max(1,Math.floor(dayDiff/7)+1); return n<s?`距开学${Math.ceil((s.getTime()-n.getTime())/86400000)}天`:`第${w}周` })()}
         </span>
         <button className="text-gray-400 hover:text-indigo-500" onClick={()=>navigate('/settings')}>⚙</button>
       </div>
@@ -407,7 +407,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-3 gap-2 text-center">
             <Stat label="睡眠" value={`${data.health_today.sleep_hours || 0}h`} />
             <Stat label="运动" value={`${data.health_today.exercise_minutes || 0}分`} />
-            <Stat label="心情" value={'😀 😞 😐 😣 😡'.split(' ')[(data.health_today.mood || 3) - 1] || '😐'} />
+            <Stat label="心情" value={['😡', '😣', '😐', '😊', '😀'][(data.health_today.mood || 3) - 1] || '😐'} />
           </div>
         </div>
 

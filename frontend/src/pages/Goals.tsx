@@ -75,15 +75,22 @@ export default function Goals() {
 // ===== 日视图 =====
 function DayView() {
   const [tasks, setTasks] = useState<any[]>([])
+  const [weekTasks, setWeekTasks] = useState<any[]>([])
+  const [laterTasks, setLaterTasks] = useState<any[]>([])
   const [showAdd, setShowAdd] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   const [toggling, setToggling] = useState<number | null>(null)
   const today = todayStr()
+  const { start: ws, end: we } = weekRange()
 
   const load = () => api.get('/tasks').then(r => {
     const all = r.data || []
-    const dayFiltered = all.filter((t: any) => t.plan_date === today || t.deadline === today || (!t.plan_date && !t.deadline))
-    setTasks(dayFiltered)
+    const todayTasks = all.filter((t: any) => t.plan_date === today || t.deadline === today || (!t.plan_date && !t.deadline))
+    const weekOther = all.filter((t: any) => t.plan_date && t.plan_date > today && t.plan_date <= we && !todayTasks.includes(t))
+    const laterTasks = all.filter((t: any) => t.plan_date && t.plan_date > we && !todayTasks.includes(t) && !weekOther.includes(t))
+    setTasks(todayTasks)
+    setWeekTasks(weekOther)
+    setLaterTasks(laterTasks)
   })
 
   const pending = tasks.filter(t => t.status !== 'done')
@@ -139,6 +146,23 @@ function DayView() {
       {doneList.map(t => (
         <TaskCard key={t.id} t={t} toggling={toggling} onToggle={toggleDone} onEdit={() => { setEditing(t); setShowAdd(true) }} onDel={() => del(t.id)} onProgress={handleProgress} />
       ))}
+
+      {weekTasks.length > 0 && (
+        <>
+          <div className="text-xs text-gray-400 mt-3 font-medium">📆 本周待办 ({weekTasks.length})</div>
+          {weekTasks.map(t => (
+            <TaskCard key={t.id} t={t} toggling={toggling} onToggle={toggleDone} onEdit={() => { setEditing(t); setShowAdd(true) }} onDel={() => del(t.id)} onProgress={handleProgress} />
+          ))}
+        </>
+      )}
+      {laterTasks.length > 0 && (
+        <>
+          <div className="text-xs text-gray-400 mt-3 font-medium">📅 之后 ({laterTasks.length})</div>
+          {laterTasks.map(t => (
+            <TaskCard key={t.id} t={t} toggling={toggling} onToggle={toggleDone} onEdit={() => { setEditing(t); setShowAdd(true) }} onDel={() => del(t.id)} onProgress={handleProgress} />
+          ))}
+        </>
+      )}
 
       {showAdd && (
         <Modal onClose={() => setShowAdd(false)} title={editing ? '编辑任务' : '新建任务'}>
@@ -476,7 +500,10 @@ function TaskCard({ t, toggling, onToggle, onEdit, onDel, onProgress }: any) {
           {t.status === 'done' && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
         </div>
         <div className="flex-1 min-w-0">
-          <div className={`font-medium text-sm ${t.status === 'done' ? 'line-through text-gray-400' : 'text-gray-800 dark:text-slate-200'}`}>{t.title}</div>
+          <div className="flex items-baseline gap-2">
+            <div className={`font-medium text-sm ${t.status === 'done' ? 'line-through text-gray-400' : 'text-gray-800 dark:text-slate-200'}`}>{t.title}</div>
+            {t.description && <div className={`text-xs text-gray-400 dark:text-slate-500 truncate ${t.status === 'done' ? 'line-through' : ''}`} title={t.description}>{t.description}</div>}
+          </div>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             {t.tag && (
               <span className="inline-block text-[10px] px-1.5 py-0.5 rounded-full bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 text-indigo-600 dark:text-indigo-300 font-medium">

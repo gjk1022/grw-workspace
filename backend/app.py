@@ -1354,6 +1354,7 @@ PRESET_PROVIDERS = {
     "deepseek": {"name": "DeepSeek", "base_url": "https://api.deepseek.com/v1", "models": ["deepseek-chat", "deepseek-reasoner"]},
     "claude": {"name": "Claude (Anthropic)", "base_url": "https://api.anthropic.com/v1", "models": ["claude-3-5-sonnet", "claude-3-opus"]},
     "qwen": {"name": "通义千问", "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "models": ["qwen-plus", "qwen-max", "qwen-turbo"]},
+    "doubao": {"name": "豆包 (火山方舟)", "base_url": "https://ark.cn-beijing.volces.com/api/v3", "models": ["doubao-1-5-pro-32k-250115", "doubao-1-5-lite-32k-250115", "doubao-pro-32k"]},
     "custom": {"name": "自定义", "base_url": "", "models": []}
 }
 
@@ -1418,7 +1419,7 @@ def call_real_ai(system_prompt: str, user_prompt: str) -> str:
     api_key = client["api_key"]
 
     # 构造 OpenAI-compatible 请求（适用于 DeepSeek、通义千问等）
-    if provider in ("openai", "deepseek", "qwen", "custom"):
+    if provider in ("openai", "deepseek", "qwen", "doubao", "custom"):
         url = f"{base_url}/chat/completions"
         data = json.dumps({
             "model": model,
@@ -1508,6 +1509,71 @@ def ai_ask(body: AIAsk):
     conn.commit()
     conn.close()
     return {"answer": answer}
+
+
+# ---------- 聊天记录截图分析（视觉模型） ----------
+VISION_MODELS = {
+    "doubao": "doubao-1-5-vision-pro-32k-250115",
+    "openai": "gpt-4o",
+    "qwen": "qwen-vl-plus",
+}
+
+
+def call_vision_ai(image_base64: str, prompt: str):
+    """调用视觉模型分析图片（OpenAI 兼容 vision 格式）"""
+    client = get_ai_client()
+    provider = client["provider"]
+    api_key = client["api_key"]
+    base_url = client["base_url"].rstrip("/")
+    if provider == "local" or not api_key:
+        return None
+    vision_model = VISION_MODELS.get(provider)
+    if not vision_model:
+        return None
+    data = json.dumps({
+        "model": vision_model,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}}
+            ]
+        }],
+        "max_tokens": 2000
+    }).encode()
+    req = urllib.request.Request(f"{base_url}/chat/completions", data=data, headers={
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    })
+    try:
+        resp = urllib.request.urlopen(req, timeout=60)
+        body = json.loads(resp.read().decode())
+        return body.get("choices", [{}])[0].get("message", {}).get("content", "")
+    except Exception as e:
+        return f"[视觉分析失败: {str(e)}]"
+
+
+class ImageAnalyze(BaseModel):
+    image: str  # base64（可含 data: 前缀）
+    prompt: Optional[str] = None
+
+
+@app.post("/api/advisor/analyze-image")
+def advisor_analyze_image(body: ImageAnalyze):
+    img = body.image
+    if "," in img and img.startswith("data:"):
+        img = img.split(",", 1)[1]
+    prompt = body.prompt or (
+        "这是一张聊天记录截图。请完成：\n"
+        "1) 提取截图中的全部聊天文字，并标注每句话的说话人（如「导师：」「我：」）；\n"
+        "2) 找出导师最新发来的一条消息；\n"
+        "3) 针对导师的这条消息，给出 2-3 条得体、礼貌、带「老师」称谓的回复建议。\n"
+        "请分点清晰输出。"
+    )
+    result = call_vision_ai(img, prompt)
+    if result is None:
+        return {"ok": False, "message": "请先在「设置 → AI 接口配置」选择支持视觉的提供商（豆包/OpenAI/通义千问）并填写 API Key"}
+    return {"ok": True, "analysis": result}
 
 
 @app.get("/api/ai/history")
@@ -1661,7 +1727,18 @@ if FRONTEND_DIR.exists():
     mimetypes.add_type("application/javascript", ".js")
     mimetypes.add_type("application/javascript", ".mjs")
     mimetypes.add_type("text/css", ".css")
-    app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="assets")
+
+    # SPA 回退中间件：非 API 路径回退到 index.html
+    @app.middleware("http")
+    async def spa_fallback(request: Request, call_next):
+        path = request.url.path
+        if path.startswith("/api/") or path.startswith("/uploads/"):
+            return await call_next(request)
+        p = FRONTEND_DIR / path.lstrip("/")
+        if p.is_file() and path != "/":
+            media_type, _ = mimetypes.guess_type(str(p))
+            return FileResponse(p, media_type=media_type or "application/octet-stream")
+        return FileResponse(FRONTEND_DIR / "index.html", media_type="text/html")
 
 
 if __name__ == "__main__":

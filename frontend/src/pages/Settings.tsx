@@ -18,51 +18,80 @@ export default function Settings() {
   const [me, setMe] = useState<any>({})
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [apiBase, setApiBase] = useState('')
 
   useEffect(() => {
     api.get('/me').then(r => setMe(r.data)).catch(() => {})
     setLastSync(localStorage.getItem('grw_last_sync') || '')
+    setApiBase(localStorage.getItem('grw_api_base') || '')
   }, [])
 
-  // 云端备份
+  const saveApiBase = () => {
+    const v = apiBase.trim()
+    if (v) localStorage.setItem('grw_api_base', v)
+    else localStorage.removeItem('grw_api_base')
+    alert('✅ API 地址已更新，刷新页面后生效')
+    window.location.reload()
+  }
+
+  // 云端数据同步（含冲突检测）
   const [syncing, setSyncing] = useState(false)
   const [lastSync, setLastSync] = useState('')
-  const CLOUD = 'https://grw-workspace-production.up.railway.app/api'
+  const [syncConflict, setSyncConflict] = useState<any>(null)
+
+  const CLOUD_API = 'https://grw-workspace-production.up.railway.app/api'
+
+  const fetchAll = async (baseURL: string) => {
+    try {
+      const r = await fetch(`${baseURL}/export?format=json`)
+      if (!r.ok) return null
+      return (await r.json()).data
+    } catch { return null }
+  }
 
   const doSync = async () => {
     setSyncing(true)
     try {
-      // 1. 导出本地数据
-      const localR = await api.get('/export', { params: { format: 'json' } })
-      const localData = localR.data.data
-
-      // 2. 检测云端状态
-      let cloudOk = false
-      try { const r = await fetch(`${CLOUD}/dashboard`); cloudOk = r.ok } catch {}
-
-      // 3. 上传到云端
-      if (cloudOk) {
-        await fetch(`${CLOUD.replace('/api','')}/api/import`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: localData })
-        }).then(r => { if (!r.ok) throw new Error('云端拒绝') })
-        const now = new Date().toLocaleString('zh-CN', { hour12: false })
-        setLastSync(now); localStorage.setItem('grw_last_sync', now)
-        alert('✅ 数据已备份到云端')
+      const localData = await fetchAll('http://localhost:8000/api')
+      const cloudData = await fetchAll(CLOUD_API)
+      if (!cloudData) { alert('云端不可达，请稍后再试'); setSyncing(false); return }
+      if (!localData) {
+        const ask = confirm('未检测到本地后端。\n确定将云端数据拉取到当前后端？')
+        if (ask) { await api.post('/import', { data: cloudData }); alert('同步完成！云端数据已拉取。') }
       } else {
-        // 云端不可达 → 降级为本地下载
-        const blob = new Blob([JSON.stringify(localData, null, 2)], { type: 'application/json' })
-        const a = document.createElement('a')
-        a.href = URL.createObjectURL(blob)
-        a.download = `grw-backup-${new Date().toISOString().slice(0, 10)}.json`
-        a.click()
-        URL.revokeObjectURL(a.href)
-        alert('⚠️ 云端不可达，已降级为本地下载')
+        const localTotal = Object.values(localData).reduce((s: number, arr: any) => s + (Array.isArray(arr) ? arr.length : 0), 0)
+        const cloudTotal = Object.values(cloudData).reduce((s: number, arr: any) => s + (Array.isArray(arr) ? arr.length : 0), 0)
+        if (localTotal !== cloudTotal) {
+          setSyncConflict({ localData, cloudData, localTotal, cloudTotal })
+          setSyncing(false); return
+        } else {
+          alert('本机和云端数据一致，无需同步。')
+        }
       }
+      const now = new Date().toLocaleString('zh-CN', { hour12: false })
+      setLastSync(now); localStorage.setItem('grw_last_sync', now)
     } catch (e: any) {
-      alert('备份失败：' + e.message)
+      alert('同步失败：' + e.message)
     }
     setSyncing(false)
+  }
+
+  const resolveSync = async (choice: 'local' | 'cloud') => {
+    if (!syncConflict) return
+    const targetData = choice === 'local' ? syncConflict.localData : syncConflict.cloudData
+    const targetAPI = choice === 'local' ? CLOUD_API : 'http://localhost:8000/api'
+    try {
+      await fetch(`${targetAPI}/import`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: targetData })
+      })
+      alert(`已使用${choice === 'local' ? '本机' : '云端'}数据同步完成！`)
+      const now = new Date().toLocaleString('zh-CN', { hour12: false })
+      setLastSync(now); localStorage.setItem('grw_last_sync', now)
+    } catch (e: any) {
+      alert('同步失败：' + e.message)
+    }
+    setSyncConflict(null)
   }
 
   const save = async (e: React.FormEvent) => {
@@ -171,7 +200,21 @@ export default function Settings() {
 
       <div className="card space-y-3">
         <Item label="数据存储" value="本地 SQLite (grw.db)" />
-        <Item label="后端服务" value="http://localhost:8000" />
+        <div className="space-y-2 pb-2">
+          <span className="text-sm text-gray-500 dark:text-slate-400">后端 API 地址</span>
+          <div className="flex gap-2">
+            <input
+              className="input flex-1"
+              value={apiBase}
+              onChange={e => setApiBase(e.target.value)}
+              placeholder="留空 = 默认（本地 /api 或云端）"
+            />
+            <button className="btn-primary text-sm" onClick={saveApiBase}>保存</button>
+          </div>
+          <div className="text-xs text-gray-400">
+            当前：{apiBase || '默认地址'} · 更换后自动刷新
+          </div>
+        </div>
         <Item label="前端服务" value="http://localhost:5173" />
         <Item label="关于" value="硕博成长工作台 v1.0.0 — 长期使用的个人科研OS" />
       </div>
@@ -184,6 +227,24 @@ export default function Settings() {
           AI 模块当前使用本地示例回复，可在 backend/app.py 中替换 <code className="bg-gray-100 dark:bg-slate-700 px-1 rounded">ai_advisor_reply</code> / <code className="bg-gray-100 dark:bg-slate-700 px-1 rounded">ai_journal_reply</code> 为调用真实大模型 API（如 OpenAI / 通义千问 / DeepSeek 等）。
         </p>
       </div>
+
+      {/* 同步冲突对话框 */}
+      {syncConflict && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setSyncConflict(null)}>
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="text-center mb-4">
+              <div className="text-4xl mb-2">🔄</div>
+              <h3 className="font-bold text-lg text-gray-800 dark:text-slate-100">检测到数据差异</h3>
+              <p className="text-sm text-gray-500 mt-2">本机和云端的部分记录内容不一致，<br/>请选择本次同步以哪边的数据为准。</p>
+            </div>
+            <div className="space-y-2">
+              <button className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-2.5 rounded-lg font-medium" onClick={() => resolveSync('local')}>📱 使用本机数据（覆盖云端）</button>
+              <button className="w-full border border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 py-2.5 rounded-lg" onClick={() => resolveSync('cloud')}>☁️ 使用云端数据（覆盖本机）</button>
+              <button className="w-full text-gray-400 hover:text-gray-600 py-2 text-sm" onClick={() => setSyncConflict(null)}>取消同步</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

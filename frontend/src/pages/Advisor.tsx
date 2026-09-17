@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import api from '../lib/api'
 
 // ===== 场景检测 =====
 const SCENES: { key: string; label: string; icon: string; keywords: string[] }[] = [
@@ -111,11 +112,62 @@ export default function Advisor() {
   const [input, setInput] = useState('')
   const [scene, setScene] = useState<any>(null)
   const [copied, setCopied] = useState<number | null>(null)
+  const [imagePreview, setImagePreview] = useState('')
+  const [analyzing, setAnalyzing] = useState(false)
+  const [imageResult, setImageResult] = useState('')
+  const [pasted, setPasted] = useState(false)
 
   const analyze = () => {
     if (!input.trim()) return
     const s = detectScene(input)
     setScene(s)
+  }
+
+  // 核心分析逻辑：接收 base64，调后端视觉分析
+  const runAnalysis = async (base64: string) => {
+    setImagePreview(base64)
+    setAnalyzing(true)
+    setImageResult('')
+    try {
+      const r = await api.post('/advisor/analyze-image', { image: base64 })
+      if (r.data.ok) {
+        setImageResult(r.data.analysis)
+      } else {
+        setImageResult('⚠️ ' + r.data.message)
+      }
+    } catch (err: any) {
+      setImageResult('⚠️ 分析失败：' + (err.response?.data?.message || err.message || '网络错误'))
+    }
+    setAnalyzing(false)
+  }
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = async () => {
+      await runAnalysis(reader.result as string)
+      e.target.value = ''
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // 粘贴截图（Ctrl+V）
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile()
+        if (file) {
+          e.preventDefault()
+          const reader = new FileReader()
+          reader.onload = () => { setPasted(true); runAnalysis(reader.result as string) }
+          reader.readAsDataURL(file)
+          return
+        }
+      }
+    }
   }
 
   const copyText = async (text: string, idx: number) => {
@@ -130,7 +182,7 @@ export default function Advisor() {
   const suggestions: Script[] = bank ? [...bank.scripts].sort((a, b) => a.safety - b.safety) : []
 
   return (
-    <div className="space-y-5 max-w-4xl">
+    <div className="space-y-5 max-w-4xl" onPaste={handlePaste}>
       <div>
         <h1 className="text-2xl font-bold text-gray-800 dark:text-slate-100">导师消息应答助手</h1>
         <p className="text-sm text-gray-500 mt-1">输入导师原话 → 场景自动识别 → 按安全程度给出话术建议</p>
@@ -147,6 +199,36 @@ export default function Advisor() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* 截图分析区 */}
+      <div className="card">
+        <label className="label">📸 聊天记录截图分析</label>
+        <p className="text-xs text-gray-400 mb-3">上传或直接 <kbd className="px-1 bg-gray-100 dark:bg-slate-600 rounded">Ctrl+V</kbd> 粘贴截图，AI 自动提取文字并给出回复建议（需先在设置页配置支持视觉的 AI）</p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <label className="inline-flex items-center gap-2 btn-primary cursor-pointer">
+            <span>{analyzing ? '分析中…' : '🖼 上传截图'}</span>
+            <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={analyzing} />
+          </label>
+          <span className="text-xs text-gray-400">或在本页任意位置按 Ctrl+V 粘贴截图</span>
+          {pasted && <span className="text-xs text-emerald-500">✓ 已从剪贴板读取</span>}
+        </div>
+        {imagePreview && (
+          <div className="mt-3 flex gap-3">
+            <img src={imagePreview} alt="截图预览" className="max-h-48 rounded-lg border border-gray-200 dark:border-slate-600" />
+          </div>
+        )}
+        {imageResult && (
+          <div className="mt-3 bg-gray-50 dark:bg-slate-700 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs text-gray-400 font-medium">🤖 分析结果</div>
+              <button className="text-xs text-indigo-500 hover:text-indigo-600" onClick={() => copyText(imageResult, 999)}>
+                {copied === 999 ? '已复制 ✓' : '复制全部'}
+              </button>
+            </div>
+            <div className="text-sm text-gray-700 dark:text-slate-200 whitespace-pre-wrap leading-relaxed">{imageResult}</div>
+          </div>
+        )}
       </div>
 
       {/* 输入区 */}
